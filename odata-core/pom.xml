@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-	<modelVersion>4.0.0</modelVersion>
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-	<artifactId>com.sap.core.odata.core</artifactId>
-	<packaging>jar</packaging>
+    <artifactId>com.sap.core.odata.core</artifactId>
+    <packaging>jar</packaging>
 
 	<parent>
 		<groupId>com.sap.odata</groupId>
@@ -12,20 +12,64 @@
 		<version>0.6.0-SNAPSHOT</version>
 		<relativePath>..</relativePath>
 	</parent>
+    <!-- not supported because of static behaviour of serialization tests -->
+    <!-- <build> -->
+    <!-- <plugins> -->
+    <!-- <plugin> -->
+    <!-- <groupId>org.apache.maven.plugins</groupId> -->
+    <!-- <artifactId>maven-surefire-plugin</artifactId> -->
+    <!-- <configuration> -->
+    <!-- <parallel>classes</parallel> -->
+    <!-- <threadCount>10</threadCount> -->
+    <!-- </configuration> -->
+    <!-- </plugin> -->
+    <!-- </plugins> -->
+    <!-- </build> -->
 
-	<!-- not supported because of static behaviour of serialization tests -->
-	<!-- <build> -->
-	<!-- <plugins> -->
-	<!-- <plugin> -->
-	<!-- <groupId>org.apache.maven.plugins</groupId> -->
-	<!-- <artifactId>maven-surefire-plugin</artifactId> -->
-	<!-- <configuration> -->
-	<!-- <parallel>classes</parallel> -->
-	<!-- <threadCount>10</threadCount> -->
-	<!-- </configuration> -->
-	<!-- </plugin> -->
-	<!-- </plugins> -->
-	<!-- </build> -->
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
+                    </archive>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <id>bundle-manifest</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>manifest</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <instructions>
+                        <Import-Package>
+                            javax.ws.rs,
+                            javax.ws.rs.*,
+                            org.slf4j,
+                            org.slf4j.*,
+                            *
+                        </Import-Package>
+                        <Export-Package>
+                            com.sap.core.odata.core.rest.app;version=${project.version},
+                            com.sap.core.odata.core.rt;version=${project.version},
+                        </Export-Package>
+                        <Bundle-DocURL>${project.url}</Bundle-DocURL>
+                        <Bundle-ActivationPolicy>lazy</Bundle-ActivationPolicy>
+                        <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
+                    </instructions>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 	<build>
 		<plugins>
@@ -69,86 +113,23 @@
 			</plugin>
 		</plugins>
 	</build>
-
-	<profiles>
-		<profile>
-			<id>coverage</id>
-			<activation>
-				<property>
-					<name>ldi.parent.emma-coverage</name>
-				</property>
-			</activation>
-			<build>
-				<plugins>
-					<plugin>
-						<!-- copy api during test to target/api_dependency -->
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-dependency-plugin</artifactId>
-						<executions>
-							<execution>
-								<id>copy api classes</id>
-								<phase>generate-test-resources</phase>
-								<goals>
-									<goal>unpack</goal>
-								</goals>
-								<configuration>
-									<artifactItems>
-										<artifactItem>
-											<groupId>com.sap.odata</groupId>
-											<artifactId>com.sap.core.odata.api</artifactId>
-											<version>${project.version}</version>
-											<outputDirectory>${project.build.directory}/api_dependency</outputDirectory>
-											<overWrite>true</overWrite>
-										</artifactItem>
-									</artifactItems>
-								</configuration>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<!-- instrument the copied api classes -->
-						<groupId>org.sonatype.maven.plugin</groupId>
-						<artifactId>emma-maven-plugin</artifactId>
-						<executions>
-							<execution>
-								<id>instrument api classes</id>
-								<phase>process-test-resources</phase>
-								<goals>
-									<goal>instrument</goal>
-								</goals>
-								<configuration>
-									<instrumentationPaths>
-										<param>${project.build.directory}/api_dependency</param>
-									</instrumentationPaths>
-								</configuration>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-surefire-plugin</artifactId>
-						<configuration>
-							<!-- use the instrumented classes for test execution -->
-							<classesDirectory>${project.build.directory}/generated-classes/emma/classes</classesDirectory>
-						</configuration>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
-	</profiles>
-
-	<dependencies>
-		<dependency>
-			<groupId>javax.servlet</groupId>
-			<artifactId>servlet-api</artifactId>
-			<version>2.5</version>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.cxf</groupId>
-			<artifactId>cxf-rt-frontend-jaxrs</artifactId>
-			<version>${cxf.version}</version>
-		</dependency>
+    <dependencies>
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+            <version>2.5</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>javax.ws.rs</groupId>
+            <artifactId>javax.ws.rs-api</artifactId>
+            <version>2.0-m10</version>
+        </dependency>
+        <!--		<dependency>
+            <groupId>org.apache.cxf</groupId>
+            <artifactId>cxf-rt-frontend-jaxrs</artifactId>
+            <version>${cxf.version}</version>
+        </dependency>-->
 
 		<dependency>
 			<groupId>com.sap.odata</groupId>
@@ -173,5 +154,4 @@
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
-
 </project>

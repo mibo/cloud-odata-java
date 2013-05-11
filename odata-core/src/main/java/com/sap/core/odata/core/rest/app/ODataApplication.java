@@ -23,7 +23,9 @@ import javax.ws.rs.core.Application;
 
 import com.sap.core.odata.core.rest.ODataExceptionMapperImpl;
 import com.sap.core.odata.core.rest.ODataRootLocator;
+import javax.ws.rs.Path;
 
+@Path("")
 public class ODataApplication extends Application {
 
   @Override

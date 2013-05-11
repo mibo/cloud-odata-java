@@ -53,11 +53,11 @@
 			<version>2.5</version>
 			<scope>provided</scope>
 		</dependency>
-		<dependency>
+<!--		<dependency>
 			<groupId>org.apache.cxf</groupId>
 			<artifactId>cxf-rt-frontend-jaxrs</artifactId>
 			<version>${cxf.version}</version>
-		</dependency>
+		</dependency>-->
 		<dependency>
 			<groupId>com.sap.odata</groupId>
 			<artifactId>com.sap.core.odata.ref</artifactId>
