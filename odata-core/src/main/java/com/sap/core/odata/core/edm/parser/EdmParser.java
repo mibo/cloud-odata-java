@@ -29,6 +29,7 @@ import com.sap.core.odata.api.edm.EdmAction;
 import com.sap.core.odata.api.edm.EdmConcurrencyMode;
 import com.sap.core.odata.api.edm.EdmContentKind;
 import com.sap.core.odata.api.edm.EdmMultiplicity;
+import com.sap.core.odata.api.edm.EdmSimpleType;
 import com.sap.core.odata.api.edm.EdmSimpleTypeKind;
 import com.sap.core.odata.api.edm.FullQualifiedName;
 import com.sap.core.odata.api.edm.provider.AnnotationAttribute;
@@ -57,14 +58,19 @@ import com.sap.core.odata.api.edm.provider.ReferentialConstraintRole;
 import com.sap.core.odata.api.edm.provider.ReturnType;
 import com.sap.core.odata.api.edm.provider.Schema;
 import com.sap.core.odata.api.edm.provider.SimpleProperty;
+import com.sap.core.odata.api.edm.provider.Using;
 import com.sap.core.odata.api.ep.EntityProviderException;
+import java.util.HashSet;
+import java.util.Set;
 
 public class EdmParser {
 
+  private Map<String, Set<String>> inscopeMap = new HashMap<String, Set<String>>();
   private Map<String, String> aliasNamespaceMap = new HashMap<String, String>();
-  private Map<String, String> namespaceMap;
+  private Map<String, String> xmlNamespaceMap;
   private Map<String, String> mandatoryNamespaces;
   private Map<FullQualifiedName, EntityType> entityTypesMap = new HashMap<FullQualifiedName, EntityType>();
+  private Map<FullQualifiedName, ComplexType> complexTypesMap = new HashMap<FullQualifiedName, ComplexType>();
   private Map<FullQualifiedName, Association> associationsMap = new HashMap<FullQualifiedName, Association>();
   private Map<FullQualifiedName, EntityContainer> containerMap = new HashMap<FullQualifiedName, EntityContainer>();
   private List<NavigationProperty> navProperties = new ArrayList<NavigationProperty>();
@@ -99,7 +105,7 @@ public class EdmParser {
       reader.close();
       return dataServices;
     } catch (XMLStreamException e) {
-      throw new EntityProviderException(EntityProviderException.COMMON, e);
+      throw new EntityProviderException(EntityProviderException.EXCEPTION_OCCURRED.addContent(e.getClass().getSimpleName()), e);
     }
 
   }
@@ -108,6 +114,7 @@ public class EdmParser {
     reader.require(XMLStreamConstants.START_ELEMENT, Edm.NAMESPACE_EDM_2008_09, EdmParserConstants.EDM_SCHEMA);
 
     Schema schema = new Schema();
+    List<Using> usings = new ArrayList<Using>();
     List<ComplexType> complexTypes = new ArrayList<ComplexType>();
     List<EntityType> entityTypes = new ArrayList<EntityType>();
     List<Association> associations = new ArrayList<Association>();
@@ -115,6 +122,7 @@ public class EdmParser {
     List<AnnotationElement> annotationElements = new ArrayList<AnnotationElement>();
 
     schema.setNamespace(reader.getAttributeValue(null, EdmParserConstants.EDM_SCHEMA_NAMESPACE));
+    this.inscopeMap.put(schema.getNamespace(), new HashSet<String>());
     schema.setAlias(reader.getAttributeValue(null, EdmParserConstants.EDM_SCHEMA_ALIAS));
     schema.setAnnotationAttributes(readAnnotationAttribute(reader));
     currentNamespace = schema.getNamespace();
@@ -123,7 +131,9 @@ public class EdmParser {
       if (reader.isStartElement()) {
         extractNamespaces(reader);
         currentHandledStartTagName = reader.getLocalName();
-        if (EdmParserConstants.EDM_ENTITY_TYPE.equals(currentHandledStartTagName)) {
+        if (EdmParserConstants.EDM_USING.equals(currentHandledStartTagName)) {
+          usings.add(readUsing(reader, schema.getNamespace()));
+        } else if (EdmParserConstants.EDM_ENTITY_TYPE.equals(currentHandledStartTagName)) {
           entityTypes.add(readEntityType(reader));
         } else if (EdmParserConstants.EDM_COMPLEX_TYPE.equals(currentHandledStartTagName)) {
           complexTypes.add(readComplexType(reader));
@@ -139,10 +149,41 @@ public class EdmParser {
     if (schema.getAlias() != null) {
       aliasNamespaceMap.put(schema.getAlias(), schema.getNamespace());
     }
-    schema.setEntityTypes(entityTypes).setComplexTypes(complexTypes).setAssociations(associations).setEntityContainers(entityContainers).setAnnotationElements(annotationElements);
+    schema.setUsings(usings).setEntityTypes(entityTypes).setComplexTypes(complexTypes).setAssociations(associations).setEntityContainers(entityContainers).setAnnotationElements(annotationElements);
     return schema;
   }
 
+    private Using readUsing(final XMLStreamReader reader, final String schemaNamespace) 
+            throws XMLStreamException, EntityProviderException {
+        
+        reader.require(XMLStreamConstants.START_ELEMENT, Edm.NAMESPACE_EDM_2008_09, EdmParserConstants.EDM_USING);
+
+        Using using = new Using();
+        using.setNamespace(reader.getAttributeValue(null, EdmParserConstants.EDM_SCHEMA_NAMESPACE));
+        this.inscopeMap.get(schemaNamespace).add(using.getNamespace());
+        using.setAlias(reader.getAttributeValue(null, EdmParserConstants.EDM_SCHEMA_ALIAS));
+        using.setAnnotationAttributes(readAnnotationAttribute(reader));
+
+        List<AnnotationElement> annotationElements = new ArrayList<AnnotationElement>();
+        while (reader.hasNext() && !(reader.isEndElement() && Edm.NAMESPACE_EDM_2008_09.equals(reader.getNamespaceURI())
+                && EdmParserConstants.EDM_USING.equals(reader.getLocalName()))) {
+            
+            reader.next();
+            if (reader.isStartElement()) {
+                extractNamespaces(reader);
+                currentHandledStartTagName = reader.getLocalName();
+                annotationElements.add(readAnnotationElement(reader));
+            }
+        }
+        using.setAnnotationElements(annotationElements);
+
+        if (using.getAlias() != null) {
+            aliasNamespaceMap.put(using.getAlias(), using.getNamespace());
+        }
+
+        return using;
+    }
+  
   private EntityContainer readEntityContainer(final XMLStreamReader reader) throws XMLStreamException, EntityProviderException {
     reader.require(XMLStreamConstants.START_ELEMENT, Edm.NAMESPACE_EDM_2008_09, EdmParserConstants.EDM_ENTITY_CONTAINER);
     EntityContainer container = new EntityContainer();
@@ -395,6 +436,13 @@ public class EdmParser {
     List<Property> properties = new ArrayList<Property>();
     List<AnnotationElement> annotationElements = new ArrayList<AnnotationElement>();
     complexType.setName(reader.getAttributeValue(null, EdmParserConstants.EDM_NAME));
+    String baseType = reader.getAttributeValue(null, EdmParserConstants.EDM_BASE_TYPE);
+    if (baseType != null) {
+      complexType.setBaseType(extractFQName(baseType));
+    }
+    if (reader.getAttributeValue(null, EdmParserConstants.EDM_ENTITY_TYPE_ABSTRACT) != null) {
+      complexType.setAbstract("true".equalsIgnoreCase(reader.getAttributeValue(null, EdmParserConstants.EDM_ENTITY_TYPE_ABSTRACT)));
+    }
     complexType.setAnnotationAttributes(readAnnotationAttribute(reader));
     while (reader.hasNext() && !(reader.isEndElement() && Edm.NAMESPACE_EDM_2008_09.equals(reader.getNamespaceURI()) && EdmParserConstants.EDM_COMPLEX_TYPE.equals(reader.getLocalName()))) {
       reader.next();
@@ -408,8 +456,13 @@ public class EdmParser {
         }
       }
     }
-
     complexType.setProperties(properties).setAnnotationElements(annotationElements);
+    if (complexType.getName() != null) {
+      FullQualifiedName fqName = new FullQualifiedName(currentNamespace, complexType.getName());
+      complexTypesMap.put(fqName, complexType);
+    } else {
+      throw new EntityProviderException(EntityProviderException.MISSING_ATTRIBUTE.addContent("Name"));
+    }
     return complexType;
 
   }
@@ -453,12 +506,13 @@ public class EdmParser {
         extractNamespaces(reader);
       }
     }
-
+    entityType.setKey(key).setProperties(properties).setNavigationProperties(navProperties).setAnnotationElements(annotationElements);
     if (entityType.getName() != null) {
       FullQualifiedName fqName = new FullQualifiedName(currentNamespace, entityType.getName());
       entityTypesMap.put(fqName, entityType);
+    } else {
+      throw new EntityProviderException(EntityProviderException.MISSING_ATTRIBUTE.addContent("Name"));
     }
-    entityType.setKey(key).setProperties(properties).setNavigationProperties(navProperties).setAnnotationElements(annotationElements);
     return entityType;
   }
 
@@ -541,7 +595,7 @@ public class EdmParser {
     }
     FullQualifiedName fqName = extractFQName(type);
 
-    if ("Edm".equals(fqName.getNamespace())) {
+    if (EdmSimpleType.EDM_NAMESPACE.equals(fqName.getNamespace())) {
       property = readSimpleProperty(reader, fqName);
     } else {
       property = readComplexProperty(reader, fqName);
@@ -736,11 +790,11 @@ public class EdmParser {
   }
 
   private void checkAllMandatoryNamespacesAvailable() throws EntityProviderException {
-    if (!namespaceMap.containsValue(Edm.NAMESPACE_EDMX_2007_06)) {
+    if (!xmlNamespaceMap.containsValue(Edm.NAMESPACE_EDMX_2007_06)) {
       throw new EntityProviderException(EntityProviderException.INVALID_NAMESPACE.addContent(Edm.NAMESPACE_EDMX_2007_06));
-    } else if (!namespaceMap.containsValue(Edm.NAMESPACE_M_2007_08)) {
+    } else if (!xmlNamespaceMap.containsValue(Edm.NAMESPACE_M_2007_08)) {
       throw new EntityProviderException(EntityProviderException.INVALID_NAMESPACE.addContent(Edm.NAMESPACE_EDMX_2007_06));
-    } else if (!namespaceMap.containsValue(Edm.NAMESPACE_EDM_2008_09)) {
+    } else if (!xmlNamespaceMap.containsValue(Edm.NAMESPACE_EDM_2008_09)) {
       throw new EntityProviderException(EntityProviderException.INVALID_NAMESPACE.addContent(Edm.NAMESPACE_EDMX_2007_06));
     }
   }
@@ -753,7 +807,7 @@ public class EdmParser {
       if (namespacePrefix == null || DEFAULT_NAMESPACE.equals(namespacePrefix)) {
         namespacePrefix = Edm.PREFIX_EDM;
       }
-      namespaceMap.put(namespacePrefix, namespaceUri);
+      xmlNamespaceMap.put(namespacePrefix, namespaceUri);
     }
   }
 
@@ -762,18 +816,17 @@ public class EdmParser {
     // Looking for the last dot
     String[] names = name.split("\\" + Edm.DELIMITER + "(?=[^\\" + Edm.DELIMITER + "]+$)");
     if (names.length != 2) {
-      throw new EntityProviderException(EntityProviderException.COMMON.addContent("Invalid type"));
+      throw new EntityProviderException(EntityProviderException.ILLEGAL_ARGUMENT.addContent("Attribute should specify a namespace qualified name or an alias qualified name"));
     } else {
       return new FullQualifiedName(names[0], names[1]);
     }
-
   }
 
   private FullQualifiedName validateEntityTypeWithAlias(final FullQualifiedName aliasName) throws EntityProviderException {
     String namespace = aliasNamespaceMap.get(aliasName.getNamespace());
     FullQualifiedName fqName = new FullQualifiedName(namespace, aliasName.getName());
     if (!entityTypesMap.containsKey(fqName)) {
-      throw new EntityProviderException(EntityProviderException.COMMON.addContent("Invalid Type"));
+      throw new EntityProviderException(EntityProviderException.ILLEGAL_ARGUMENT.addContent("Invalid Type"));
     }
     return fqName;
   }
@@ -792,10 +845,33 @@ public class EdmParser {
             baseEntityType = entityTypesMap.get(baseTypeFQName);
           }
           if (baseEntityType.getKey() == null) {
-            throw new EntityProviderException(EntityProviderException.COMMON.addContent("Missing key for EntityType " + baseEntityType.getName()));
+            throw new EntityProviderException(EntityProviderException.ILLEGAL_ARGUMENT.addContent("Missing key for EntityType " + baseEntityType.getName()));
           }
         } else if (entityType.getKey() == null) {
-          throw new EntityProviderException(EntityProviderException.COMMON.addContent("Missing key for EntityType " + entityType.getName()));
+          throw new EntityProviderException(EntityProviderException.ILLEGAL_ARGUMENT.addContent("Missing key for EntityType " + entityType.getName()));
+        }
+      }
+    }
+  }
+
+  private FullQualifiedName validateComplexTypeWithAlias(final FullQualifiedName aliasName) throws EntityProviderException {
+    String namespace = aliasNamespaceMap.get(aliasName.getNamespace());
+    FullQualifiedName fqName = new FullQualifiedName(namespace, aliasName.getName());
+    if (!complexTypesMap.containsKey(fqName)) {
+      throw new EntityProviderException(EntityProviderException.ILLEGAL_ARGUMENT.addContent("Invalid BaseType").addContent(fqName));
+    }
+    return fqName;
+  }
+
+  private void validateComplexTypes() throws EntityProviderException {
+    for (Map.Entry<FullQualifiedName, ComplexType> complexTypes : complexTypesMap.entrySet()) {
+      if (complexTypes.getValue() != null && complexTypes.getKey() != null) {
+        ComplexType complexType = complexTypes.getValue();
+        if (complexType.getBaseType() != null) {
+          FullQualifiedName baseTypeFQName = complexType.getBaseType();
+          if (!complexTypesMap.containsKey(baseTypeFQName)) {
+            validateComplexTypeWithAlias(baseTypeFQName);
+          }
         }
       }
     }
@@ -807,7 +883,7 @@ public class EdmParser {
         Association assoc = associationsMap.get(navProperty.getRelationship());
         if (!(assoc.getEnd1().getRole().equals(navProperty.getFromRole()) ^ assoc.getEnd1().getRole().equals(navProperty.getToRole())
         && (assoc.getEnd2().getRole().equals(navProperty.getFromRole()) ^ assoc.getEnd2().getRole().equals(navProperty.getToRole())))) {
-          throw new EntityProviderException(EntityProviderException.COMMON.addContent("Invalid end of association"));
+          throw new EntityProviderException(EntityProviderException.ILLEGAL_ARGUMENT.addContent("Invalid end of association"));
         }
         if (!entityTypesMap.containsKey(assoc.getEnd1().getType())) {
           validateEntityTypeWithAlias(assoc.getEnd1().getType());
@@ -816,7 +892,7 @@ public class EdmParser {
           validateEntityTypeWithAlias(assoc.getEnd2().getType());
         }
       } else {
-        throw new EntityProviderException(EntityProviderException.COMMON.addContent("Invalid Relationship"));
+        throw new EntityProviderException(EntityProviderException.ILLEGAL_ARGUMENT.addContent("Invalid Relationship"));
       }
     }
 
@@ -826,7 +902,7 @@ public class EdmParser {
     for (Map.Entry<FullQualifiedName, EntityContainer> container : containerMap.entrySet()) {
       for (AssociationSet associationSet : container.getValue().getAssociationSets()) {
         FullQualifiedName association = associationSet.getAssociation();
-        if (associationsMap.containsKey(association) && container.getKey().getNamespace().equals(association.getNamespace())) {
+        if (associationsMap.containsKey(association)) {
           validateAssociationEnd(associationSet.getEnd1(), associationsMap.get(association));
           validateAssociationEnd(associationSet.getEnd2(), associationsMap.get(association));
           boolean end1 = false;
@@ -840,10 +916,10 @@ public class EdmParser {
             }
           }
           if (!(end1 && end2)) {
-            throw new EntityProviderException(EntityProviderException.COMMON.addContent("Invalid AssociationSet"));
+            throw new EntityProviderException(EntityProviderException.ILLEGAL_ARGUMENT.addContent("Invalid AssociationSet"));
           }
         } else {
-          throw new EntityProviderException(EntityProviderException.COMMON.addContent("Invalid AssociationSet"));
+          throw new EntityProviderException(EntityProviderException.ILLEGAL_ARGUMENT.addContent("Invalid AssociationSet"));
         }
       }
     }
@@ -860,8 +936,7 @@ public class EdmParser {
     for (Map.Entry<FullQualifiedName, EntityContainer> container : containerMap.entrySet()) {
       for (EntitySet entitySet : container.getValue().getEntitySets()) {
         FullQualifiedName entityType = entitySet.getEntityType();
-        if (!(entityTypesMap.containsKey(entityType)
-        && container.getKey().getNamespace().equals(entityType.getNamespace()))) {
+        if (!(entityTypesMap.containsKey(entityType))) {
           validateEntityTypeWithAlias(entityType);
         }
       }
@@ -871,13 +946,14 @@ public class EdmParser {
   private void validate() throws EntityProviderException {
     checkAllMandatoryNamespacesAvailable();
     validateEntityTypes();
+    validateComplexTypes();
     validateRelationship();
-    validateAssociation();
     validateEntitySet();
+    validateAssociation();
   }
 
   private void initialize() {
-    namespaceMap = new HashMap<String, String>();
+    xmlNamespaceMap = new HashMap<String, String>();
     mandatoryNamespaces = new HashMap<String, String>();
     mandatoryNamespaces.put(Edm.PREFIX_EDMX, Edm.NAMESPACE_EDMX_2007_06);
     mandatoryNamespaces.put(Edm.PREFIX_EDM, Edm.NAMESPACE_EDM_2008_09);

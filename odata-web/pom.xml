@@ -9,7 +9,7 @@
 	<parent>
 		<groupId>com.sap.odata</groupId>
 		<artifactId>com.sap.core.odata.parent</artifactId>
-		<version>0.6.0-SNAPSHOT</version>
+		<version>0.7.0-SNAPSHOT</version>
 		<relativePath>..</relativePath>
 	</parent>
 
@@ -44,7 +44,7 @@
 		</plugins>
 
 	</build>
-
+	
 	<dependencies>
 		<dependency>
 			<!-- required because of auto detection of web facet 2.5 -->
@@ -73,18 +73,37 @@
 			<artifactId>slf4j-log4j12</artifactId>
 			<version>1.7.1</version>
 		</dependency>
-		<dependency>
-			<groupId>com.sap.core.js.catalina</groupId>
-			<artifactId>com.sap.core.js.catalina.fragment</artifactId>
-			<version>1.1.1</version>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.tomcat</groupId>
-			<artifactId>tomcat-catalina</artifactId>
-			<version>7.0.30</version>
-			<scope>provided</scope>
-		</dependency>
 	</dependencies>
 
+    <profiles>
+      <profile>
+        <id>dev</id>
+        
+        <build>
+          <defaultGoal>cargo:run</defaultGoal>         
+          
+          <plugins>
+            <plugin>
+              <groupId>org.codehaus.cargo</groupId>
+              <artifactId>cargo-maven2-plugin</artifactId>
+              <version>1.4.2</version>
+            </plugin>
+          </plugins>
+        </build>        
+      </profile>
+               <profile>
+                        <id>cloudbuild</id>
+                        <activation>
+                                <activeByDefault>false</activeByDefault>
+                        </activation>
+                        <dependencies>
+                                <dependency>
+                                        <groupId>com.sap.core.js.catalina</groupId>
+                                        <artifactId>com.sap.core.js.catalina.fragment</artifactId>
+                                        <version>1.1.1</version>
+                                        <scope>provided</scope>
+                                </dependency>
+                        </dependencies>
+                </profile>
+    </profiles>
 </project>
