@@ -33,10 +33,9 @@ import javax.ws.rs.ext.Provider;
 
 import com.sap.core.odata.core.rest.ODataExceptionMapperImpl;
 import com.sap.core.odata.core.rest.ODataRootLocator;
+import javax.ws.rs.Path;
 
-/**
- * @author SAP AG
- */
+@Path("")
 public class ODataApplication extends Application {
 
   @Override
