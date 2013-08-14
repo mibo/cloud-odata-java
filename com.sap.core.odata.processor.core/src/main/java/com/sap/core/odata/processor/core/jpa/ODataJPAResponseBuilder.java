@@ -78,7 +78,7 @@ public final class ODataJPAResponseBuilder {
       JPAEntityParser jpaResultParser = JPAEntityParser.create();
       final List<SelectItem> selectedItems = resultsView.getSelect();
       if (selectedItems != null && selectedItems.size() > 0) {
-        for (Object jpaEntity : jpaEntities) {
+        for (T jpaEntity : jpaEntities) {
           edmPropertyValueMap = jpaResultParser
               .parse2EdmPropertyValueMap(
                   jpaEntity,
@@ -87,7 +87,7 @@ public final class ODataJPAResponseBuilder {
           edmEntityList.add(edmPropertyValueMap);
         }
       } else {
-        for (Object jpaEntity : jpaEntities) {
+        for (T jpaEntity : jpaEntities) {
           edmPropertyValueMap = jpaResultParser
               .parse2EdmPropertyValueMap(jpaEntity, edmEntityType);
           edmEntityList.add(edmPropertyValueMap);
@@ -96,7 +96,7 @@ public final class ODataJPAResponseBuilder {
       expandList = resultsView.getExpand();
       if (expandList != null && expandList.size() != 0) {
         int count = 0;
-        for (Object jpaEntity : jpaEntities) {
+        for (T jpaEntity : jpaEntities) {
           Map<String, Object> relationShipMap = edmEntityList.get(count);
           HashMap<String, Object> navigationMap = jpaResultParser.parse2EdmNavigationValueMap(
               jpaEntity, constructListofNavProperty(expandList));
